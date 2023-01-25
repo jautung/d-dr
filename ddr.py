@@ -254,6 +254,8 @@ class DDRWindow:
         glutInitWindowPosition(position_x, position_y)
         glutInitWindowSize(display_width, display_height)
         self._window = glutCreateWindow("D/DR")
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glEnable(GL_BLEND)
 
         print('⏳️ Precomputing...')
         self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
@@ -310,8 +312,15 @@ class DDRWindow:
             assert(False)
 
         def is_position_y_in_display(position_y, position_y_hold_end):
-            # TODO: Fix this for [position_y_hold_end]
-            return position_y >= -ARROW_SIZE and position_y <= self._display_height
+            if position_y >= -ARROW_SIZE and position_y <= self._display_height:
+                return True
+            if not position_y_hold_end:
+                return False
+            if position_y_hold_end >= -ARROW_SIZE and position_y_hold_end <= self._display_height:
+                return True
+            if position_y > self._display_height and position_y_hold_end < -ARROW_SIZE:
+                return True
+            return False
 
         return [get_display_for_frame(frame) for frame in range(get_last_frame_to_precompute())]
 
@@ -366,8 +375,9 @@ class DDRWindow:
             if displayed_beat.variant == DDR_BEAT_VARIANT_DEFAULT:
                 self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
             elif displayed_beat.variant == DDR_BEAT_VARIANT_HOLD_START:
-                self._hold_arrow_background(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y, position_y_hold_end=displayed_beat.position_y_hold_end)
+                self._hold_background(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y, position_y_hold_end=displayed_beat.position_y_hold_end)
                 self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
+                self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y_hold_end, is_outline_only=True)
             elif displayed_beat.variant == DDR_BEAT_VARIANT_MINE:
                 self._mine(direction=displayed_beat.direction, position_y=displayed_beat.position_y)
             else:
@@ -423,7 +433,7 @@ class DDRWindow:
 
         glPopMatrix()
 
-    def _hold_arrow_background(self, rgb, direction, position_y, position_y_hold_end):
+    def _hold_background(self, rgb, direction, position_y, position_y_hold_end):
         position_x = self._position_x_from_direction(direction)
         rotation_angle_degrees = self._rotation_angle_degrees_from_direction(direction)
         position_y_hold_end_delta = position_y_hold_end - position_y
@@ -437,7 +447,6 @@ class DDRWindow:
 
         glColor4f(*rgb, HOLD_ALPHA)
 
-        # TODO: Make nicer! And fix [ALPHA]!
         glBegin(GL_POLYGON)
         glVertex2f(0         , ARROW_SIZE               )
         glVertex2f(ARROW_SIZE, ARROW_SIZE               )
