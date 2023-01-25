@@ -85,32 +85,30 @@ class Beatmap:
                     if row[i] != '0':
                         ddr_beat_list.append(Beat(
                             measure_time=measure_index+row_index/len(rows),
-                            beat_within_measure=row_index,
-                            total_beats_in_measure=len(rows),
+                            rgb=self._get_ddr_beat_rgb(row_index, len(rows)),
                             direction=BeatDirection(i),
                             variant=row[i], # TODO: Handle variant '2' = start hold, '3' = end hold, and 'M' = mine (throw assertions for new types)
                         ))
         return ddr_beat_list
 
-class Beat:
-    def __init__(self, measure_time, beat_within_measure, total_beats_in_measure, direction, variant):
-        self.measure_time = measure_time
-        self._beat_within_measure = beat_within_measure
-        self._total_beats_in_measure = total_beats_in_measure
-        self.direction = direction
-        self.variant = variant # 1, 2, 3, etc., based on .ssc encoding
-
-    def rgb(self):
-        if (4*self._beat_within_measure) % self._total_beats_in_measure == 0:
+    def _get_ddr_beat_rgb(self, beat_within_measure, total_beats_in_measure):
+        if (4*beat_within_measure) % total_beats_in_measure == 0:
             return RED_RGB
-        elif (8*self._beat_within_measure) % self._total_beats_in_measure == 0:
+        elif (8*beat_within_measure) % total_beats_in_measure == 0:
             return BLUE_RGB
-        elif (6*self._beat_within_measure) % self._total_beats_in_measure == 0:
+        elif (6*beat_within_measure) % total_beats_in_measure == 0:
             return GREEN_RGB
-        elif (12*self._beat_within_measure) % self._total_beats_in_measure == 0:
+        elif (12*beat_within_measure) % total_beats_in_measure == 0:
             return PURPLE_RGB
         else:
             return WHITE_RGB
+
+class Beat:
+    def __init__(self, measure_time, rgb, direction, variant):
+        self.measure_time = measure_time
+        self.rgb = rgb
+        self.direction = direction
+        self.variant = variant # 1, 2, 3, etc., based on .ssc encoding
 
 class BeatDirection(enum.Enum):
     LEFT = 0
@@ -267,7 +265,7 @@ class DDRWindow:
                 position_y = self._arrow_target_position_y + (precomputed_frame - beat_target_frame) * ARROW_SPEED_PIXELS_PER_FRAME
                 if position_y >= -ARROW_SIZE and position_y <= self._display_height:
                     precomputed_display.append(DisplayedBeat(
-                        rgb=beat.rgb(),
+                        rgb=beat.rgb,
                         direction=beat.direction,
                         position_y=position_y,
                     ))
