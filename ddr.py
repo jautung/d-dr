@@ -13,6 +13,11 @@ import time
 ################
 
 DDR_BEATS_PER_ROW = 4
+DDR_BEAT_VARIANT_NONE = '0'
+DDR_BEAT_VARIANT_DEFAULT = '1'
+DDR_BEAT_VARIANT_HOLD_START = '2'
+DDR_BEAT_VARIANT_HOLD_END = '3'
+DDR_BEAT_VARIANT_MINE = 'M'
 
 class Song:
     def __init__(self, header_data, beatmap_list):
@@ -82,12 +87,12 @@ class Beatmap:
             rows = [measure[i:i+DDR_BEATS_PER_ROW] for i in range(0, len(measure), DDR_BEATS_PER_ROW)]
             for row_index, row in enumerate(rows):
                 for i in range(DDR_BEATS_PER_ROW):
-                    if row[i] != '0':
+                    if row[i] != DDR_BEAT_VARIANT_NONE:
                         ddr_beat_list.append(Beat(
                             measure_time=measure_index+row_index/len(rows),
                             rgb=self._get_ddr_beat_rgb(row_index, len(rows)),
                             direction=BeatDirection(i),
-                            variant=row[i], # TODO: Handle variant '2' = start hold, '3' = end hold, and 'M' = mine (throw assertions for new types)
+                            variant=row[i],
                         ))
         return ddr_beat_list
 
@@ -108,7 +113,7 @@ class Beat:
         self.measure_time = measure_time
         self.rgb = rgb
         self.direction = direction
-        self.variant = variant # 1, 2, 3, etc., based on .ssc encoding
+        self.variant = variant
 
 class BeatDirection(enum.Enum):
     LEFT = 0
@@ -217,10 +222,12 @@ GREEN_RGB = (0.0, 0.8, 0.1)
 PURPLE_RGB = (0.5, 0.0, 0.75)
 
 class DisplayedBeat:
-    def __init__(self, rgb, direction, position_y):
+    def __init__(self, rgb, direction, variant, position_y, position_y_hold_end):
         self.rgb = rgb
         self.direction = direction
+        self.variant = variant
         self.position_y = position_y
+        self.position_y_hold_end = position_y_hold_end
 
 class DDRWindow:
     def __init__(self, song, beatmap, precomputed_fps=PRECOMPUTED_FPS, position_x=POSITION_X, position_y=POSITION_Y, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
@@ -246,31 +253,58 @@ class DDRWindow:
 
         self._start_time = time.time()
 
+    # This can theoretically be optimized by using the fact that [beat_list] is sorted by [measure_time],
+    # but doing so feels like over-engineering since this is a precomputing step
     def _precompute_displays(self, song, beatmap, precomputed_fps):
         beats_per_minute = song.beats_per_minute()
         beats_per_measure = song.beats_per_measure()
+        beat_list = beatmap.ddr_beat_list()
 
         def measure_time_to_frame(measure_time):
             return measure_time * beats_per_measure / beats_per_minute * 60 * precomputed_fps
 
-        beat_list = beatmap.ddr_beat_list()
-        last_beat_measure_time = max([beat.measure_time for beat in beat_list])
-        last_beat_frame = int(math.ceil(measure_time_to_frame(last_beat_measure_time)))
+        def measure_time_to_position_y_at_frame(measure_time, frame):
+            target_frame = measure_time_to_frame(measure_time)
+            return self._arrow_target_position_y + (frame - target_frame) * ARROW_SPEED_PIXELS_PER_FRAME
 
-        precomputed_displays = []
-        for precomputed_frame in range(last_beat_frame + PRECOMPUTED_ADDITIONAL_SECONDS*PRECOMPUTED_FPS):
-            precomputed_display = []
-            for beat in beat_list:
-                beat_target_frame = measure_time_to_frame(beat.measure_time)
-                position_y = self._arrow_target_position_y + (precomputed_frame - beat_target_frame) * ARROW_SPEED_PIXELS_PER_FRAME
-                if position_y >= -ARROW_SIZE and position_y <= self._display_height:
-                    precomputed_display.append(DisplayedBeat(
-                        rgb=beat.rgb,
-                        direction=beat.direction,
-                        position_y=position_y,
-                    ))
-            precomputed_displays.append(precomputed_display)
-        return precomputed_displays
+        def get_last_frame_to_precompute():
+            last_beat_measure_time = max([beat.measure_time for beat in beat_list])
+            last_beat_frame = int(math.ceil(measure_time_to_frame(last_beat_measure_time)))
+            return last_beat_frame + PRECOMPUTED_ADDITIONAL_SECONDS*PRECOMPUTED_FPS
+
+        def get_display_for_frame(frame):
+            displayed_beats_with_nones = [get_displayed_beat_for_frame(beat, beat_index, frame) for beat_index, beat in enumerate(beat_list)]
+            return list(filter(lambda displayed_beat: displayed_beat, displayed_beats_with_nones))
+
+        def get_displayed_beat_for_frame(beat, beat_index, frame):
+            if beat.variant == DDR_BEAT_VARIANT_HOLD_END:
+                return None # Display will be handled by the start of the hold note
+            position_y = measure_time_to_position_y_at_frame(beat.measure_time, frame)
+            if beat.variant == DDR_BEAT_VARIANT_HOLD_START:
+                position_y_hold_end = measure_time_to_position_y_at_frame(get_beat_hold_end_for_hold_start(beat, beat_index).measure_time, frame)
+            else:
+                position_y_hold_end = None
+            if not is_position_y_in_display(position_y, position_y_hold_end):
+                return None
+            return DisplayedBeat(
+                rgb=beat.rgb,
+                direction=beat.direction,
+                variant=beat.variant,
+                position_y=position_y,
+                position_y_hold_end=position_y_hold_end,
+            )
+
+        def get_beat_hold_end_for_hold_start(beat, beat_index):
+            assert(beat.variant == DDR_BEAT_VARIANT_HOLD_START)
+            for next_beat in beat_list[beat_index+1:]:
+                if next_beat.variant == DDR_BEAT_VARIANT_HOLD_END and next_beat.direction == beat.direction:
+                    return next_beat
+            assert(False)
+
+        def is_position_y_in_display(position_y, position_y_hold_end):
+            return position_y >= -ARROW_SIZE and position_y <= self._display_height
+
+        return [get_display_for_frame(frame) for frame in range(get_last_frame_to_precompute())]
 
     def run(self):
         glutDisplayFunc(self._display_func)
