@@ -450,6 +450,7 @@ def full_select_beatmap():
 
 def main():
     song_selected, beatmap_selected = full_select_beatmap()
+    print(f'🎵 {song_selected.displayed_name()} | {beatmap_selected.displayed_difficulty()}')
     ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected)
     ddr_window.run()
 
