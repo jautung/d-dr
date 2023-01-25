@@ -85,20 +85,32 @@ class Beatmap:
                     if row[i] != '0':
                         ddr_beat_list.append(Beat(
                             measure_time=measure_index+row_index/len(rows),
+                            beat_within_measure=row_index,
+                            total_beats_in_measure=len(rows),
                             direction=BeatDirection(i),
                             variant=row[i], # TODO: Handle variant '2' = start hold, '3' = end hold, and 'M' = mine (throw assertions for new types)
                         ))
         return ddr_beat_list
 
 class Beat:
-    def __init__(self, measure_time, direction, variant):
-        self.measure_time = measure_time # normalized to '1' per measure
+    def __init__(self, measure_time, beat_within_measure, total_beats_in_measure, direction, variant):
+        self.measure_time = measure_time
+        self._beat_within_measure = beat_within_measure
+        self._total_beats_in_measure = total_beats_in_measure
         self.direction = direction
         self.variant = variant # 1, 2, 3, etc., based on .ssc encoding
 
     def rgb(self):
-        # TODO: Make colors correct
-        return RED_RGB
+        if (4*self._beat_within_measure) % self._total_beats_in_measure == 0:
+            return RED_RGB
+        elif (8*self._beat_within_measure) % self._total_beats_in_measure == 0:
+            return BLUE_RGB
+        elif (6*self._beat_within_measure) % self._total_beats_in_measure == 0:
+            return GREEN_RGB
+        elif (12*self._beat_within_measure) % self._total_beats_in_measure == 0:
+            return PURPLE_RGB
+        else:
+            return WHITE_RGB
 
 class BeatDirection(enum.Enum):
     LEFT = 0
@@ -197,12 +209,14 @@ ARROW_DIAGONAL_WIDTH = ARROW_SIZE/10
 ARROW_STRAIGHT_WIDTH = ARROW_DIAGONAL_WIDTH*1.5
 ARROW_TOP_MARGIN = 30
 ARROW_HORIZONTAL_MARGIN = 20
-ARROW_SPEED_PIXELS_PER_SECOND = 600 # TODO: Make this configurable
+ARROW_SPEED_PIXELS_PER_SECOND = 800 # TODO: Make this configurable
 ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
 WHITE_RGB = (0.9, 0.9, 0.9)
 RED_RGB = (1.0, 0.0, 0.0)
 BLUE_RGB = (0.0, 0.0, 1.0)
+GREEN_RGB = (0.0, 1.0, 0.0)
+PURPLE_RGB = (1.0, 0.0, 1.0)
 
 class DisplayedBeat:
     def __init__(self, rgb, direction, position_y):
@@ -304,6 +318,7 @@ class DDRWindow:
     def _moving_arrows(self, current_time):
         current_frame = int(current_time * PRECOMPUTED_FPS)
         if current_frame >= len(self._precomputed_displays): # Song is over!
+            # TODO: Find out why this keeps segfaulting and maybe find a more graceful way to exit
             glutDestroyWindow(self._window)
         precomputed_display = self._precomputed_displays[current_frame]
         for displayed_beat in precomputed_display:
