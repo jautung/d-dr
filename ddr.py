@@ -213,10 +213,10 @@ ARROW_SPEED_PIXELS_PER_SECOND = 800 # TODO: Make this configurable
 ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
 WHITE_RGB = (0.9, 0.9, 0.9)
-RED_RGB = (1.0, 0.0, 0.0)
-BLUE_RGB = (0.0, 0.0, 1.0)
-GREEN_RGB = (0.0, 1.0, 0.0)
-PURPLE_RGB = (1.0, 0.0, 1.0)
+RED_RGB = (1.0, 0.25, 0.25)
+BLUE_RGB = (0.125, 0.125, 1.0)
+GREEN_RGB = (0.0, 0.8, 0.1)
+PURPLE_RGB = (0.5, 0.0, 0.75)
 
 class DisplayedBeat:
     def __init__(self, rgb, direction, position_y):
