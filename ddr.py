@@ -212,6 +212,13 @@ ARROW_DIAGONAL_WIDTH = ARROW_SIZE/10
 ARROW_STRAIGHT_WIDTH = ARROW_DIAGONAL_WIDTH*1.5
 ARROW_TOP_MARGIN = 30
 ARROW_HORIZONTAL_MARGIN = 20
+
+HOLD_ALPHA = 0.2
+
+MINE_MARGIN = ARROW_SIZE/10
+MINE_EXCLAMATION_WIDTH = ARROW_STRAIGHT_WIDTH
+MINE_EXCLAMATION_HEIGHT = ARROW_SIZE/3
+
 ARROW_SPEED_PIXELS_PER_SECOND = 800 # TODO: Make this configurable
 ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
@@ -220,6 +227,7 @@ RED_RGB = (1.0, 0.25, 0.25)
 BLUE_RGB = (0.125, 0.125, 1.0)
 GREEN_RGB = (0.0, 0.8, 0.1)
 PURPLE_RGB = (0.5, 0.0, 0.75)
+ORANGE_RGB = (1.0, 0.9, 0.75)
 
 class DisplayedBeat:
     def __init__(self, rgb, direction, variant, position_y, position_y_hold_end):
@@ -302,6 +310,7 @@ class DDRWindow:
             assert(False)
 
         def is_position_y_in_display(position_y, position_y_hold_end):
+            # TODO: Fix this for [position_y_hold_end]
             return position_y >= -ARROW_SIZE and position_y <= self._display_height
 
         return [get_display_for_frame(frame) for frame in range(get_last_frame_to_precompute())]
@@ -354,24 +363,19 @@ class DDRWindow:
             glutDestroyWindow(self._window)
         precomputed_display = self._precomputed_displays[current_frame]
         for displayed_beat in precomputed_display:
-            self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
+            if displayed_beat.variant == DDR_BEAT_VARIANT_DEFAULT:
+                self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
+            elif displayed_beat.variant == DDR_BEAT_VARIANT_HOLD_START:
+                self._hold_arrow_background(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y, position_y_hold_end=displayed_beat.position_y_hold_end)
+                self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
+            elif displayed_beat.variant == DDR_BEAT_VARIANT_MINE:
+                self._mine(direction=displayed_beat.direction, position_y=displayed_beat.position_y)
+            else:
+                assert(False)
 
     def _arrow(self, rgb, direction, position_y, is_outline_only=False):
-        match direction:
-            case BeatDirection.LEFT:
-                position_x = self._arrow_left_position_x
-                rotation_angle_degrees = 90
-            case BeatDirection.DOWN:
-                position_x = self._arrow_down_position_x
-                rotation_angle_degrees = 180
-            case BeatDirection.UP:
-                position_x = self._arrow_up_position_x
-                rotation_angle_degrees = 0
-            case BeatDirection.RIGHT:
-                position_x = self._arrow_right_position_x
-                rotation_angle_degrees = 270
-
-        glColor3f(*rgb)
+        position_x = self._position_x_from_direction(direction)
+        rotation_angle_degrees = self._rotation_angle_degrees_from_direction(direction)
 
         glPushMatrix()
         glTranslatef(
@@ -390,6 +394,8 @@ class DDRWindow:
             -ARROW_SIZE/2, # y
             0, # z
         )
+
+        glColor3f(*rgb)
 
         glBegin(GL_LINE_LOOP if is_outline_only else GL_POLYGON)
         glVertex2f(ARROW_DIAGONAL_WIDTH + ARROW_DIAGONAL_WIDTH/2, ARROW_SIZE/2 - ARROW_DIAGONAL_WIDTH + ARROW_DIAGONAL_WIDTH/2)
@@ -416,6 +422,89 @@ class DDRWindow:
         glEnd()
 
         glPopMatrix()
+
+    def _hold_arrow_background(self, rgb, direction, position_y, position_y_hold_end):
+        position_x = self._position_x_from_direction(direction)
+        rotation_angle_degrees = self._rotation_angle_degrees_from_direction(direction)
+        position_y_hold_end_delta = position_y_hold_end - position_y
+
+        glPushMatrix()
+        glTranslatef(
+            position_x, # x
+            position_y, # y
+            0, # z
+        )
+
+        glColor4f(*rgb, HOLD_ALPHA)
+
+        # TODO: Make nicer! And fix [ALPHA]!
+        glBegin(GL_POLYGON)
+        glVertex2f(0         , ARROW_SIZE               )
+        glVertex2f(ARROW_SIZE, ARROW_SIZE               )
+        glVertex2f(ARROW_SIZE, position_y_hold_end_delta)
+        glVertex2f(0         , position_y_hold_end_delta)
+        glEnd()
+
+        glPopMatrix()
+
+    def _mine(self, direction, position_y):
+        position_x = self._position_x_from_direction(direction)
+
+        glPushMatrix()
+        glTranslatef(
+            position_x, # x
+            position_y, # y
+            0, # z
+        )
+
+        glColor3f(*ORANGE_RGB)
+
+        glBegin(GL_POLYGON)
+        glVertex2f(MINE_MARGIN             , ARROW_SIZE - MINE_MARGIN)
+        glVertex2f(ARROW_SIZE - MINE_MARGIN, ARROW_SIZE - MINE_MARGIN)
+        glVertex2f(ARROW_SIZE - MINE_MARGIN, MINE_MARGIN             )
+        glVertex2f(MINE_MARGIN             , MINE_MARGIN             )
+        glEnd()
+
+        glColor3f(*RED_RGB)
+
+        glBegin(GL_POLYGON)
+        glVertex2f(ARROW_SIZE/2 - MINE_EXCLAMATION_WIDTH/2, ARROW_SIZE/2 - MINE_EXCLAMATION_HEIGHT/2                         )
+        glVertex2f(ARROW_SIZE/2 + MINE_EXCLAMATION_WIDTH/2, ARROW_SIZE/2 - MINE_EXCLAMATION_HEIGHT/2                         )
+        glVertex2f(ARROW_SIZE/2 + MINE_EXCLAMATION_WIDTH/2, ARROW_SIZE/2 - MINE_EXCLAMATION_HEIGHT/2 - MINE_EXCLAMATION_WIDTH)
+        glVertex2f(ARROW_SIZE/2 - MINE_EXCLAMATION_WIDTH/2, ARROW_SIZE/2 - MINE_EXCLAMATION_HEIGHT/2 - MINE_EXCLAMATION_WIDTH)
+        glEnd()
+
+        glBegin(GL_POLYGON)
+        glVertex2f(ARROW_SIZE/2 - MINE_EXCLAMATION_WIDTH/2 - MINE_EXCLAMATION_WIDTH/6, ARROW_SIZE/2 + MINE_EXCLAMATION_HEIGHT/2 + MINE_EXCLAMATION_WIDTH)
+        glVertex2f(ARROW_SIZE/2 + MINE_EXCLAMATION_WIDTH/2 + MINE_EXCLAMATION_WIDTH/6, ARROW_SIZE/2 + MINE_EXCLAMATION_HEIGHT/2 + MINE_EXCLAMATION_WIDTH)
+        glVertex2f(ARROW_SIZE/2 + MINE_EXCLAMATION_WIDTH/2                           , ARROW_SIZE/2 - MINE_EXCLAMATION_HEIGHT/2 + MINE_EXCLAMATION_WIDTH)
+        glVertex2f(ARROW_SIZE/2 - MINE_EXCLAMATION_WIDTH/2                           , ARROW_SIZE/2 - MINE_EXCLAMATION_HEIGHT/2 + MINE_EXCLAMATION_WIDTH)
+        glEnd()
+
+        glPopMatrix()
+
+    def _position_x_from_direction(self, direction):
+        match direction:
+            case BeatDirection.LEFT:
+                return self._arrow_left_position_x
+            case BeatDirection.DOWN:
+                return self._arrow_down_position_x
+            case BeatDirection.UP:
+                return self._arrow_up_position_x
+            case BeatDirection.RIGHT:
+                return self._arrow_right_position_x
+
+    def _rotation_angle_degrees_from_direction(self, direction):
+        match direction:
+            case BeatDirection.LEFT:
+                return 90
+            case BeatDirection.DOWN:
+                return 180
+            case BeatDirection.UP:
+                return 0
+            case BeatDirection.RIGHT:
+                return 270
 
 ################
 # DISPLAY END
