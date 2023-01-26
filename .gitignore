@@ -1,5 +1,6 @@
 **/.DS_Store
 songs/*
+songs_extra/*
 !songs/Goin' Under/*
 !songs/MechaTribe Assault/*
 !songs/Springtime/*

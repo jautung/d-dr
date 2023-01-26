@@ -149,7 +149,10 @@ class BeatDirection(enum.Enum):
 # PARSING START
 ################
 
+PYTHON_BOM_CHARACTER_ORD = 65279
+
 def parse(lines, file_format):
+    lines = strip_prefixed_bom_characters(lines)
     header_data = parse_hashtag_headered(lines)
     beatmap_list = []
     while True:
@@ -239,6 +242,10 @@ def parse_beatmap_sm_data(beatmap_lines):
         'RADARVALUES': beatmap_data[4].strip(),
         'NOTES': beatmap_data[5].strip(),
     }
+
+def strip_prefixed_bom_characters(lines):
+    # https://stackoverflow.com/questions/74683953/python-keeps-adding-character-65279-to-the-beginning-of-my-file
+    return [line if ord(line[0]) != PYTHON_BOM_CHARACTER_ORD else line[1:] for line in lines]
 
 def strip_comments(line):
     comment_start = line.find('//')
@@ -434,7 +441,9 @@ class DDRWindow:
         self._arrow(rgb=WHITE_RGB, direction=BeatDirection.RIGHT, position_y=self._arrow_target_position_y, is_outline_only=True)
 
     def _moving_arrows(self, current_time):
-        for displayed_beat in self._precomputed_displays[int(current_time * PRECOMPUTED_FPS)]:
+        current_frame = int(current_time * PRECOMPUTED_FPS)
+        displayed_beats = self._precomputed_displays[current_frame] if current_frame < len(self._precomputed_displays) else []
+        for displayed_beat in displayed_beats:
             if displayed_beat.variant == DDR_BEAT_VARIANT_DEFAULT:
                 self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
             elif displayed_beat.variant == DDR_BEAT_VARIANT_HOLD_START:
