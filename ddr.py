@@ -287,7 +287,7 @@ ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
 SONG_SPEED = 1 # TODO: Respect this and make this configurable
 
-GLOBAL_MUSIC_OFFSET_SECONDS = 0.22 # TODO: I wonder why we need this manual offset
+GLOBAL_MUSIC_OFFSET_SECONDS = 0.22 # TODO: I wonder why we need this manual offset; maybe make this tweakable in-game as well
 MILLISECONDS_IN_SECONDS = 1000
 
 WHITE_RGB = (0.9, 0.9, 0.9)
