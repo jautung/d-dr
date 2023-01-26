@@ -6,7 +6,7 @@ So... [StepMania](https://www.stepmania.com/download/) says _"Sorry, StepMania d
 
 ![th_id=OIP](https://user-images.githubusercontent.com/30332110/214804294-d54fe379-d96c-458f-bd37-67e15e8ed7c0.jpg)
 
-🤯 **D/DR** is a StepMania clone that is meant to be display-only on screen, and not meant to be interactive. In other words, it is a glorified `.ssc|.sm` file-to-display converter. Still can be used for practice and/or great fun though 🙃!
+🤯 **D/DR** is a minimal StepMania clone that is meant to be a MVP display-only on screen, and not meant to be interactive. In other words, it is a glorified `.ssc|.sm` file-to-display converter. Still can be used for practice and/or great fun though 🙃!
 
 🚧 Obviously WIP 🚧. Some things are not working yet, and these may or may not eventually be supported, depending on how much motivation I can muster 😬:
 - Parsing songs that have varying BPMs
