@@ -6,8 +6,7 @@ import enum
 import math
 import os
 import pick
-import time
-import vlc
+import pygame
 
 ################
 # SONG START
@@ -35,6 +34,9 @@ class Song:
 
     def music_filename(self):
         return self._header_data['MUSIC']
+
+    def music_offset(self):
+        return float(self._header_data['OFFSET'])
 
     def beats_per_minute(self):
         # TODO: Handle within-song changing BPMS
@@ -224,6 +226,8 @@ ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
 SONG_SPEED = 1 # TODO: Respect this and make this configurable
 
+MILLISECONDS_IN_SECONDS = 1000
+
 WHITE_RGB = (0.9, 0.9, 0.9)
 RED_RGB = (1.0, 0.25, 0.25)
 BLUE_RGB = (0.125, 0.125, 1.0)
@@ -259,13 +263,16 @@ class DDRWindow:
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glEnable(GL_BLEND)
 
+        pygame.mixer.init()
+        pygame.mixer.music.load(song_music_filepath)
+        self._song_music_offset = song.music_offset()
+
         print('⏳️ Precomputing...')
         self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
         print('✅ Precomputing complete!')
 
         # TODO: Sync this somehow, maybe with offsets
-        vlc.MediaPlayer(song_music_filepath).play()
-        self._start_time = time.time()
+        pygame.mixer.music.play()
 
     # This can theoretically be optimized by using the fact that [beat_list] is sorted by [measure_time],
     # but doing so feels like over-engineering since this is a precomputing step
@@ -336,7 +343,7 @@ class DDRWindow:
     def _display_func(self):
         self._display_reset()
         self._target_arrows()
-        self._moving_arrows(time.time() - self._start_time)
+        self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS)
         glutSwapBuffers()
 
     def _display_reset(self):
