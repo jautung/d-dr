@@ -7,6 +7,7 @@ import math
 import os
 import pick
 import time
+import vlc
 
 ################
 # SONG START
@@ -33,7 +34,6 @@ class Song:
         return int(self.beats_per_minute())
 
     def music_filename(self):
-        # TODO: Figure out how to play this
         return self._header_data['MUSIC']
 
     def beats_per_minute(self):
@@ -222,6 +222,8 @@ MINE_EXCLAMATION_HEIGHT = ARROW_SIZE/3
 ARROW_SPEED_PIXELS_PER_SECOND = 800 # TODO: Make this configurable
 ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
+SONG_SPEED = 1 # TODO: Respect this and make this configurable
+
 WHITE_RGB = (0.9, 0.9, 0.9)
 RED_RGB = (1.0, 0.25, 0.25)
 BLUE_RGB = (0.125, 0.125, 1.0)
@@ -238,7 +240,7 @@ class DisplayedBeat:
         self.position_y_hold_end = position_y_hold_end
 
 class DDRWindow:
-    def __init__(self, song, beatmap, precomputed_fps=PRECOMPUTED_FPS, position_x=POSITION_X, position_y=POSITION_Y, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
+    def __init__(self, song, beatmap, song_music_filepath, precomputed_fps=PRECOMPUTED_FPS, position_x=POSITION_X, position_y=POSITION_Y, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
         self._position_x = position_x
         self._position_y = position_y
         self._display_width = display_width
@@ -261,6 +263,8 @@ class DDRWindow:
         self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
         print('✅ Precomputing complete!')
 
+        # TODO: Sync this somehow, maybe with offsets
+        vlc.MediaPlayer(song_music_filepath).play()
         self._start_time = time.time()
 
     # This can theoretically be optimized by using the fact that [beat_list] is sorted by [measure_time],
@@ -541,8 +545,8 @@ def get_song_list():
         song_music_filepath = os.path.join(song_dir_filepath, song.music_filename())
         if not os.path.exists(song_music_filepath):
             continue
-        song_list.append(song)
-    song_list.sort(key=lambda song: song.displayed_name())
+        song_list.append((song, song_music_filepath))
+    song_list.sort(key=lambda song_and_song_music_filepath_pair: song_and_song_music_filepath_pair[0].displayed_name())
     return song_list
 
 ################
@@ -557,7 +561,7 @@ PICK_INDICATOR = '=>'
 
 def select_song():
     song_list = get_song_list()
-    song_displayed_options = [song.displayed_name() for song in song_list]
+    song_displayed_options = [song.displayed_name() for song, _ in song_list]
     _, song_selected_index = pick.pick(options=song_displayed_options, title='Choose song...', indicator=PICK_INDICATOR)
     return song_list[song_selected_index]
 
@@ -571,17 +575,17 @@ def select_beatmap(song_selected):
         return beatmap_list[beatmap_selected_index]
 
 def full_select_beatmap():
-    song_selected = select_song()
+    song_selected, song_selected_music_filepath = select_song()
     beatmap_selected = select_beatmap(song_selected)
     if beatmap_selected:
-        return song_selected, beatmap_selected
+        return song_selected, beatmap_selected, song_selected_music_filepath
     else: # <Back>
         return full_select_beatmap()
 
 def main():
-    song_selected, beatmap_selected = full_select_beatmap()
+    song_selected, beatmap_selected, song_selected_music_filepath = full_select_beatmap()
     print(f'🎵 {song_selected.displayed_name()} | {beatmap_selected.displayed_difficulty()}')
-    ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected)
+    ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected, song_music_filepath=song_selected_music_filepath)
     ddr_window.run()
 
 ################
