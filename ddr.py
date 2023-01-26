@@ -75,6 +75,11 @@ class Beatmap:
     def is_ddr_beatmap(self):
         return self._type() == 'dance-single'
 
+    def music_offset(self):
+        if 'OFFSET' in self._data and self._data['OFFSET']:
+            return float(self._data['OFFSET'])
+        return None
+
     def ddr_beat_list(self):
         if self._cached_ddr_beat_list:
             return self._cached_ddr_beat_list
@@ -226,6 +231,7 @@ ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
 SONG_SPEED = 1 # TODO: Respect this and make this configurable
 
+GLOBAL_MUSIC_OFFSET_SECONDS = 0.22 # TODO: I wonder why we need this manual offset
 MILLISECONDS_IN_SECONDS = 1000
 
 WHITE_RGB = (0.9, 0.9, 0.9)
@@ -265,7 +271,7 @@ class DDRWindow:
 
         pygame.mixer.init()
         pygame.mixer.music.load(song_music_filepath)
-        self._song_music_offset = song.music_offset()
+        self._music_offset = (beatmap.music_offset() if beatmap.music_offset() else song.music_offset()) + GLOBAL_MUSIC_OFFSET_SECONDS
 
         print('⏳️ Precomputing...')
         self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
@@ -343,7 +349,7 @@ class DDRWindow:
     def _display_func(self):
         self._display_reset()
         self._target_arrows()
-        self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS - self._song_music_offset)
+        self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS - self._music_offset)
         glutSwapBuffers()
 
     def _display_reset(self):
