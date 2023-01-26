@@ -597,11 +597,15 @@ class DDRWindow:
 
 SONG_MAIN_DIR_NAME = 'songs'
 
-def get_song_list():
-    assert(SONG_MAIN_DIR_NAME in os.listdir())
+def get_song_folder_list():
+    assert(os.path.exists(SONG_MAIN_DIR_NAME))
+    return [song_folder for song_folder in os.listdir(SONG_MAIN_DIR_NAME) if os.path.isdir(os.path.join(SONG_MAIN_DIR_NAME, song_folder))]
+
+def get_song_list(song_folder):
+    song_folder_filepath = os.path.join(SONG_MAIN_DIR_NAME, song_folder)
     song_list = []
-    for song_dir_name in os.listdir(SONG_MAIN_DIR_NAME):
-        song_dir_filepath = os.path.join(SONG_MAIN_DIR_NAME, song_dir_name)
+    for song_dir_name in os.listdir(song_folder_filepath):
+        song_dir_filepath = os.path.join(song_folder_filepath, song_dir_name)
         if not os.path.isdir(song_dir_filepath):
             continue
         song_ssc_filename = next(filter(lambda file: file.lower().endswith('.ssc'), os.listdir(song_dir_filepath)), None)
@@ -622,7 +626,6 @@ def get_song_list():
             continue
         # TODO: Handle within-song changing BPMS
         if song.has_varying_beats_per_minute():
-            print(f'⚠️ Skipping "{song_dir_name}" because it has varying beats per minute...')
             continue
         song_music_filepath = os.path.join(song_dir_filepath, song.music_filename())
         if not os.path.exists(song_music_filepath):
@@ -642,21 +645,6 @@ def get_song_list():
 
 PICK_INDICATOR = '=>'
 
-def select_song():
-    song_list = get_song_list()
-    song_displayed_options = [song.displayed_name() for song, _ in song_list]
-    _, song_selected_index = pick.pick(options=song_displayed_options, title='Choose song...', indicator=PICK_INDICATOR)
-    return song_list[song_selected_index]
-
-def select_beatmap(song_selected):
-    beatmap_list = song_selected.ddr_beatmap_list()
-    beatmap_displayed_options = [beatmap.displayed_difficulty() for beatmap in beatmap_list]
-    _, beatmap_selected_index = pick.pick(options=beatmap_displayed_options + ['<Back>'], title='Choose difficulty...', indicator=PICK_INDICATOR)
-    if beatmap_selected_index == len(beatmap_list): # <Back>
-        return None
-    else:
-        return beatmap_list[beatmap_selected_index]
-
 def full_select_beatmap():
     song_selected, song_selected_music_filepath = select_song()
     beatmap_selected = select_beatmap(song_selected)
@@ -666,7 +654,49 @@ def full_select_beatmap():
         return full_select_beatmap()
 
 def main():
-    song_selected, beatmap_selected, song_selected_music_filepath = full_select_beatmap()
+    song_folder_selected = None
+    song_selected = None
+    song_selected_music_filepath = None
+    beatmap_selected = None
+
+    def select_song_folder():
+        song_folder_list = get_song_folder_list()
+        _, song_folder_selected_index = pick.pick(options=song_folder_list, title='Choose song pack...', indicator=PICK_INDICATOR)
+        nonlocal song_folder_selected
+        song_folder_selected = song_folder_list[song_folder_selected_index]
+        select_song()
+
+    def select_song():
+        nonlocal song_folder_selected
+        song_list = get_song_list(song_folder_selected)
+        song_displayed_options = [song.displayed_name() for song, _ in song_list]
+        _, song_selected_index = pick.pick(options=song_displayed_options + ['<Back>'], title='Choose song...', indicator=PICK_INDICATOR)
+        if song_selected_index == len(song_list): # <Back>
+            song_folder_selected = None
+            select_song_folder()
+        else:
+            nonlocal song_selected
+            nonlocal song_selected_music_filepath
+            song_selected, song_selected_music_filepath = song_list[song_selected_index]
+            select_beatmap()
+
+    def select_beatmap():
+        nonlocal song_selected
+        beatmap_list = song_selected.ddr_beatmap_list()
+        beatmap_displayed_options = [beatmap.displayed_difficulty() for beatmap in beatmap_list]
+        _, beatmap_selected_index = pick.pick(options=beatmap_displayed_options + ['<Back>'], title='Choose difficulty...', indicator=PICK_INDICATOR)
+        if beatmap_selected_index == len(beatmap_list): # <Back>
+            nonlocal song_selected_music_filepath
+            song_selected = None
+            song_selected_music_filepath = None
+            select_song()
+        else:
+            nonlocal beatmap_selected
+            beatmap_selected = beatmap_list[beatmap_selected_index]
+
+    select_song_folder()
+    assert(song_folder_selected and song_selected and song_selected_music_filepath and beatmap_selected)
+
     print(f'🎵 {song_selected.displayed_name()} | {beatmap_selected.displayed_difficulty()}')
     ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected, song_music_filepath=song_selected_music_filepath)
     ddr_window.run()
