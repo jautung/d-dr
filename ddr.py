@@ -379,6 +379,9 @@ class DDRWindow:
         glutMainLoop()
 
     def _display_func(self):
+        if not pygame.mixer.music.get_busy(): # Song is over!
+            # TODO: Find out why this keeps segfaulting and maybe find a more graceful way to exit
+            glutDestroyWindow(self._window)
         self._display_reset()
         self._target_arrows()
         self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS - self._music_offset)
@@ -415,12 +418,7 @@ class DDRWindow:
         self._arrow(rgb=WHITE_RGB, direction=BeatDirection.RIGHT, position_y=self._arrow_target_position_y, is_outline_only=True)
 
     def _moving_arrows(self, current_time):
-        current_frame = int(current_time * PRECOMPUTED_FPS)
-        if current_frame >= len(self._precomputed_displays): # Song is over!
-            # TODO: Find out why this keeps segfaulting and maybe find a more graceful way to exit
-            glutDestroyWindow(self._window)
-        precomputed_display = self._precomputed_displays[current_frame]
-        for displayed_beat in precomputed_display:
+        for displayed_beat in self._precomputed_displays[int(current_time * PRECOMPUTED_FPS)]:
             if displayed_beat.variant == DDR_BEAT_VARIANT_DEFAULT:
                 self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
             elif displayed_beat.variant == DDR_BEAT_VARIANT_HOLD_START:
