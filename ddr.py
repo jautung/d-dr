@@ -595,8 +595,8 @@ def get_song_list():
         song_dir_filepath = os.path.join(SONG_MAIN_DIR_NAME, song_dir_name)
         if not os.path.isdir(song_dir_filepath):
             continue
-        song_ssc_filename = next(filter(lambda file: file.endswith('.ssc'), os.listdir(song_dir_filepath)), None)
-        song_sm_filename = next(filter(lambda file: file.endswith('.sm'), os.listdir(song_dir_filepath)), None)
+        song_ssc_filename = next(filter(lambda file: file.lower().endswith('.ssc'), os.listdir(song_dir_filepath)), None)
+        song_sm_filename = next(filter(lambda file: file.lower().endswith('.sm'), os.listdir(song_dir_filepath)), None)
         if song_ssc_filename:
             song_ssc_filepath = os.path.join(song_dir_filepath, song_ssc_filename)
             with open(song_ssc_filepath) as f:
@@ -609,15 +609,15 @@ def get_song_list():
         else:
             song = None
         if not song:
-            print(f'Skipping "{song_dir_name}" because it is missing the .ssc/.sm file...')
+            print(f'⚠️ Skipping "{song_dir_name}" because it is missing the .ssc/.sm file...')
             continue
         # TODO: Handle within-song changing BPMS
         if song.has_varying_beats_per_minute():
-            print(f'Skipping "{song_dir_name}" because it has varying beats per minute...')
+            print(f'⚠️ Skipping "{song_dir_name}" because it has varying beats per minute...')
             continue
         song_music_filepath = os.path.join(song_dir_filepath, song.music_filename())
         if not os.path.exists(song_music_filepath):
-            print(f'Skipping "{song_dir_name}" because it is missing the music file...')
+            print(f'⚠️ Skipping "{song_dir_name}" because it is missing the music file...')
             continue
         song_list.append((song, song_music_filepath))
     song_list.sort(key=lambda song_and_song_music_filepath_pair: song_and_song_music_filepath_pair[0].displayed_name())
