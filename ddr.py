@@ -47,6 +47,8 @@ class Song:
         return float(bpms_data[1])
 
     def beats_per_measure(self):
+        if 'TIMESIGNATURES' not in self._header_data:
+            return 4 # This is the default if not specified
         # TODO: Handle different 'TIMESIGNATURES'
         time_signatures_data = self._header_data['TIMESIGNATURES'].split('=')
         assert(float(time_signatures_data[0]) == 0)
@@ -138,11 +140,11 @@ class BeatDirection(enum.Enum):
 # PARSING START
 ################
 
-def parse(lines):
+def parse(lines, file_format):
     header_data = parse_hashtag_headered(lines)
     beatmap_list = []
     while True:
-        maybe_beatmap = parse_beatmap(lines)
+        maybe_beatmap = parse_beatmap(lines, file_format)
         if maybe_beatmap:
             beatmap_list.append(maybe_beatmap)
         else:
@@ -177,7 +179,7 @@ def get_hashtag_label(line):
     assert(colon_index != -1)
     return line[:colon_index]
 
-def parse_beatmap(lines):
+def parse_beatmap(lines, file_format):
     while True:
         if len(lines) == 0:
             return None
@@ -192,13 +194,41 @@ def parse_beatmap(lines):
         if peek_line.startswith('//----'):
             break
         line = lines.pop(0).strip('\n')
-        beatmap_lines.append(line)
-    return Beatmap(title_line=parse_beatmap_title_line(beatmap_title_line), data=parse_hashtag_headered(beatmap_lines))
+        beatmap_lines.append(strip_comments(line))
+
+    if file_format == '.ssc':
+        beatmap_data = parse_hashtag_headered(beatmap_lines)
+    elif file_format == '.sm':
+        beatmap_data = parse_beatmap_sm_data(beatmap_lines)
+    else:
+        assert(False)
+
+    return Beatmap(title_line=parse_beatmap_title_line(beatmap_title_line), data=beatmap_data)
 
 def parse_beatmap_title_line(beatmap_title_line):
     assert(beatmap_title_line.startswith('//'))
     beatmap_title_line = beatmap_title_line[2:]
     return beatmap_title_line.strip('-')
+
+def parse_beatmap_sm_data(beatmap_lines):
+    beatmap_data_raw = parse_hashtag_headered(beatmap_lines)
+    assert('NOTES' in beatmap_data_raw)
+    beatmap_data = beatmap_data_raw['NOTES'].split(':')
+    assert(len(beatmap_data) == 6)
+    return {
+        'STEPSTYPE': beatmap_data[0].strip(),
+        'DESCRIPTION': beatmap_data[1].strip(),
+        'DIFFICULTY': beatmap_data[2].strip(),
+        'METER': beatmap_data[3].strip(),
+        'RADARVALUES': beatmap_data[4].strip(),
+        'NOTES': beatmap_data[5].strip(),
+    }
+
+def strip_comments(line):
+    comment_start = line.find('//')
+    if comment_start == -1:
+        return line
+    return line[:comment_start].strip()
 
 ################
 # PARSING END
@@ -552,11 +582,20 @@ def get_song_list():
         if not os.path.isdir(song_dir_filepath):
             continue
         song_ssc_filename = next(filter(lambda file: file.endswith('.ssc'), os.listdir(song_dir_filepath)), None)
-        if not song_ssc_filename:
+        song_sm_filename = next(filter(lambda file: file.endswith('.sm'), os.listdir(song_dir_filepath)), None)
+        if song_ssc_filename:
+            song_ssc_filepath = os.path.join(song_dir_filepath, song_ssc_filename)
+            with open(song_ssc_filepath) as f:
+                song = parse(f.readlines(), '.ssc')
+        elif song_sm_filename:
+            # .sm is the legacy file format (https://www.reddit.com/r/Stepmania/comments/a1arfu/difference_between_sm_and_ssc_file_types/)
+            song_sm_filepath = os.path.join(song_dir_filepath, song_sm_filename)
+            with open(song_sm_filepath) as f:
+                song = parse(f.readlines(), '.sm')
+        else:
+            song = None
+        if not song:
             continue
-        song_ssc_filepath = os.path.join(song_dir_filepath, song_ssc_filename)
-        with open(song_ssc_filepath) as f:
-            song = parse(f.readlines())
         song_music_filepath = os.path.join(song_dir_filepath, song.music_filename())
         if not os.path.exists(song_music_filepath):
             continue
