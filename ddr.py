@@ -31,7 +31,12 @@ class Song:
 
     def _displayed_beats_per_minute(self):
         if 'DISPLAYBPM' in self._header_data:
-            return int(self._header_data['DISPLAYBPM'])
+            display_bpm_data = self._header_data['DISPLAYBPM']
+            if ':' not in display_bpm_data:
+                return int(float(display_bpm_data))
+            display_bpm_data_split = display_bpm_data.split(':')
+            assert(len(display_bpm_data_split) == 2)
+            return f'{int(float(display_bpm_data_split[0]))}~{int(float(display_bpm_data_split[1]))}'
         return int(self.beats_per_minute())
 
     def music_filename(self):
@@ -45,6 +50,10 @@ class Song:
         bpms_data = self._header_data['BPMS'].split('=')
         assert(float(bpms_data[0]) == 0)
         return float(bpms_data[1])
+
+    def has_varying_beats_per_minute(self):
+        # TODO: Handle within-song changing BPMS
+        return ',' in self._header_data['BPMS']
 
     def beats_per_measure(self):
         if 'TIMESIGNATURES' not in self._header_data:
@@ -158,6 +167,10 @@ def parse_hashtag_headered(lines):
         if line == '' or line.startswith('//'):
             break
         header_label = get_hashtag_label(line)
+        assert(line[len(header_label)+1] == ':' or line[len(header_label)+1] == ';')
+        if line[len(header_label)+1] == ';':
+            header_data[header_label] = ''
+            continue
         assert(line[len(header_label)+1] == ':')
         line = line[len(header_label)+2:]
         if len(line) > 0 and line[-1] == ';':
@@ -176,8 +189,11 @@ def get_hashtag_label(line):
     assert(line[0] == '#')
     line = line[1:]
     colon_index = line.find(':')
-    assert(colon_index != -1)
-    return line[:colon_index]
+    if colon_index != -1:
+        return line[:colon_index]
+    semicolon_index = line.find(';')
+    assert(semicolon_index != -1)
+    return line[:semicolon_index]
 
 def parse_beatmap(lines, file_format):
     while True:
@@ -593,6 +609,9 @@ def get_song_list():
         else:
             song = None
         if not song:
+            continue
+        # TODO: Handle within-song changing BPMS
+        if song.has_varying_beats_per_minute():
             continue
         song_music_filepath = os.path.join(song_dir_filepath, song.music_filename())
         if not os.path.exists(song_music_filepath):
