@@ -343,7 +343,7 @@ class DDRWindow:
     def _display_func(self):
         self._display_reset()
         self._target_arrows()
-        self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS)
+        self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS - self._song_music_offset)
         glutSwapBuffers()
 
     def _display_reset(self):
