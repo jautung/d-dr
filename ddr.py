@@ -280,7 +280,6 @@ class DDRWindow:
         self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
         print('✅ Precomputing complete!')
 
-        # TODO: Sync this somehow, maybe with offsets
         pygame.mixer.music.play()
 
     # This can theoretically be optimized by using the fact that [beat_list] is sorted by [measure_time],
