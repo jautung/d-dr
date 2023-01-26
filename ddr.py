@@ -333,7 +333,7 @@ class DDRWindow:
         self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
         print('✅ Precomputing complete!')
 
-        pygame.mixer.music.play()
+        self._started = False
 
     # This can theoretically be optimized by using the fact that [beat_list] is sorted by [measure_time],
     # but doing so feels like over-engineering since this is a precomputing step
@@ -396,13 +396,22 @@ class DDRWindow:
 
         return [get_display_for_frame(frame) for frame in range(get_last_frame_to_precompute())]
 
-    def run(self):
+    def start_main_loop(self):
         glutDisplayFunc(self._display_func)
         glutIdleFunc(self._display_func)
+        glutKeyboardFunc(self._keyboard_func)
         glutMainLoop()
 
+    def _start_song(self):
+        pygame.mixer.music.play()
+        self._started = True
+
+    def _keyboard_func(self, key, x, y):
+        if key == b' ' or key == b'\r':
+            self._start_song()
+
     def _display_func(self):
-        if not pygame.mixer.music.get_busy(): # Song is over!
+        if self._started and not pygame.mixer.music.get_busy(): # Song is over!
             # TODO: Find out why this keeps segfaulting and maybe find a more graceful way to exit
             glutDestroyWindow(self._window)
         self._display_reset()
@@ -699,7 +708,7 @@ def main():
 
     print(f'🎵 {song_selected.displayed_name()} | {beatmap_selected.displayed_difficulty()}')
     ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected, song_music_filepath=song_selected_music_filepath)
-    ddr_window.run()
+    ddr_window.start_main_loop()
 
 ################
 # MAIN END
