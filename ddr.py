@@ -221,6 +221,7 @@ ARROW_TOP_MARGIN = 30
 ARROW_HORIZONTAL_MARGIN = 20
 
 HOLD_ALPHA = 0.2
+OUTLINE_ALPHA = 0.8
 
 MINE_MARGIN = ARROW_SIZE/10
 MINE_EXCLAMATION_WIDTH = ARROW_STRAIGHT_WIDTH
@@ -422,7 +423,7 @@ class DDRWindow:
             0, # z
         )
 
-        glColor3f(*rgb)
+        glColor4f(*rgb, OUTLINE_ALPHA if is_outline_only else 1.0)
 
         glBegin(GL_LINE_LOOP if is_outline_only else GL_POLYGON)
         glVertex2f(ARROW_DIAGONAL_WIDTH + ARROW_DIAGONAL_WIDTH/2, ARROW_SIZE/2 - ARROW_DIAGONAL_WIDTH + ARROW_DIAGONAL_WIDTH/2)
