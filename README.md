@@ -18,6 +18,8 @@ So... [StepMania](https://www.stepmania.com/download/) says _"Sorry, StepMania d
 - `h`, `j`, `k`, `l` to adjust song sync (-10ms, -1ms, +1ms, +10ms respectively)
 - `q` to quit a song early
 
-## Demo 🎬
+## Demos 🎬
 
 https://user-images.githubusercontent.com/30332110/214803957-4ce2b2ce-f910-47e7-bc8f-d22d1784fbb1.mov
+
+https://user-images.githubusercontent.com/30332110/215344853-9a8943e9-ec12-4d0b-b737-b91ff2172ba5.mov
