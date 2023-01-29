@@ -71,7 +71,7 @@ class Song:
     def beats_per_measure(self):
         if 'TIMESIGNATURES' not in self._header_data:
             return 4 # This is the default if not specified
-        # TODO: Handle different 'TIMESIGNATURES'
+        # TODO: Handle songs that have non 4-4 time signatures
         time_signatures_data = self._header_data['TIMESIGNATURES'].split('=')
         assert(float(time_signatures_data[0]) == 0)
         assert(float(time_signatures_data[1]) == 4)
@@ -103,7 +103,7 @@ class Song:
         current_beats_per_minute = None
         stops_index = 0
         current_is_stopped = False
-        accumulated_measure_time = 0
+        accumulated_pixel_distance = 0
         for section_marker_time_seconds in section_markers_time_seconds:
             test_beats_per_minute_assignment = self._beats_per_minute()[beats_per_minute_index] if beats_per_minute_index < len(self._beats_per_minute()) else None
             test_stop_assignment = self._stops()[stops_index] if stops_index < len(self._stops()) else None
@@ -117,12 +117,12 @@ class Song:
                 stops_index += 1
             if len(sections) > 0:
                 previous_section = sections[-1]
-                accumulated_measure_time += previous_section.get_measure_time_duration(end_time_seconds=section_marker_time_seconds, beats_per_measure=self.beats_per_measure())
+                accumulated_pixel_distance += previous_section.pixel_distance_until_time(end_time_seconds=section_marker_time_seconds, beats_per_measure=self.beats_per_measure())
             section = SongSection(
                 time_seconds=section_marker_time_seconds,
                 beats_per_minute=current_beats_per_minute,
                 is_stopped=current_is_stopped,
-                measure_time=accumulated_measure_time,
+                accumulated_pixel_distance_start=accumulated_pixel_distance,
             )
             sections.append(section)
         return sections
@@ -133,17 +133,17 @@ class Song:
         return ddr_beatmap_list
 
 class SongSection:
-    def __init__(self, time_seconds, beats_per_minute, is_stopped, measure_time):
+    def __init__(self, time_seconds, beats_per_minute, is_stopped, accumulated_pixel_distance_start):
         self.time_seconds = time_seconds
         self.beats_per_minute = beats_per_minute
         self.is_stopped = is_stopped
-        self.measure_time = measure_time
+        self.accumulated_pixel_distance_start = accumulated_pixel_distance_start
 
-    def get_measure_time_duration(self, end_time_seconds, beats_per_measure):
+    def pixel_distance_until_time(self, end_time_seconds, beats_per_measure):
         if self.is_stopped:
             return 0
         else:
-            return (end_time_seconds - self.time_seconds) * (self.beats_per_minute / SECONDS_IN_MINUTE) / beats_per_measure
+            return (end_time_seconds - self.time_seconds) * (self.beats_per_minute / SECONDS_IN_MINUTE) / beats_per_measure * MEASURE_HEIGHT
 
 class Beatmap:
     def __init__(self, title_line, data):
@@ -359,15 +359,11 @@ ARROW_STRAIGHT_WIDTH = ARROW_DIAGONAL_WIDTH*1.5
 ARROW_TOP_MARGIN = 30
 ARROW_HORIZONTAL_MARGIN = 20
 
-HOLD_ALPHA = 0.2
-OUTLINE_ALPHA = 0.8
-
 MINE_MARGIN = ARROW_SIZE/10
 MINE_EXCLAMATION_WIDTH = ARROW_STRAIGHT_WIDTH
 MINE_EXCLAMATION_HEIGHT = ARROW_SIZE/3
 
-ARROW_SPEED_PIXELS_PER_SECOND = 800 # TODO: Make this configurable
-ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
+MEASURE_HEIGHT = 1000 # TODO: Make this configurable (this is a proxy for arrow speed)
 
 SONG_SPEED = 1 # TODO: Respect this and make this configurable
 
@@ -381,6 +377,9 @@ BLUE_RGB = (0.125, 0.125, 1.0)
 GREEN_RGB = (0.0, 0.8, 0.1)
 PURPLE_RGB = (0.5, 0.0, 0.75)
 ORANGE_RGB = (1.0, 0.9, 0.75)
+
+HOLD_ALPHA = 0.2
+OUTLINE_ALPHA = 0.8
 
 class DisplayedBeat:
     def __init__(self, rgb, direction, variant, position_y, position_y_hold_end):
@@ -427,28 +426,31 @@ class DDRWindow:
     # but doing so feels like over-engineering since this is a precomputing step
     def _precompute_displays(self, song, beatmap, precomputed_fps):
         sections = song.sections()
-        unstopped_sections = list(filter(lambda section: not section.is_stopped, sections))
         beats_per_measure = song.beats_per_measure()
 
-        def measure_time_to_section(measure_time):
-            for unstopped_section_index, unstopped_section in enumerate(unstopped_sections):
-                if unstopped_section.measure_time > measure_time:
-                    return unstopped_sections[unstopped_section_index-1]
+        def time_seconds_to_section(time_seconds):
+            for section_index, section in enumerate(sections):
+                if section.time_seconds > time_seconds:
+                    return sections[section_index-1]
             return sections[-1]
 
-        def measure_time_to_frame(measure_time):
-            section = measure_time_to_section(measure_time)
-            return (section.time_seconds + (measure_time - section.measure_time) * beats_per_measure / section.beats_per_minute * SECONDS_IN_MINUTE) * precomputed_fps
+        def pixel_distance_until_time(time_seconds):
+            section = time_seconds_to_section(time_seconds)
+            return section.accumulated_pixel_distance_start + section.pixel_distance_until_time(end_time_seconds=time_seconds, beats_per_measure=beats_per_measure)
 
         def measure_time_to_position_y_at_frame(measure_time, frame):
-            target_frame = measure_time_to_frame(measure_time)
-            return self._arrow_target_position_y + (frame - target_frame) * ARROW_SPEED_PIXELS_PER_FRAME
+            initial_position_y = self._arrow_target_position_y - measure_time * MEASURE_HEIGHT
+            return initial_position_y + pixel_distance_until_time(time_seconds=frame/precomputed_fps)
 
         beat_list = beatmap.ddr_beat_list()
 
         def get_last_frame_to_precompute():
             last_beat_measure_time = max([beat.measure_time for beat in beat_list])
-            last_beat_frame = int(math.ceil(measure_time_to_frame(last_beat_measure_time)))
+            last_beat_frame = 0
+            while True:
+                if measure_time_to_position_y_at_frame(last_beat_measure_time, last_beat_frame) > self._display_height:
+                    break
+                last_beat_frame += 1
             return last_beat_frame + PRECOMPUTED_ADDITIONAL_SECONDS*PRECOMPUTED_FPS
 
         def get_display_for_frame(frame):
