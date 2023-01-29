@@ -287,7 +287,7 @@ ARROW_SPEED_PIXELS_PER_FRAME = ARROW_SPEED_PIXELS_PER_SECOND / PRECOMPUTED_FPS
 
 SONG_SPEED = 1 # TODO: Respect this and make this configurable
 
-GLOBAL_MUSIC_OFFSET_SECONDS = 0.22 # TODO: I wonder why we need this manual offset; maybe make this tweakable in-game as well
+GLOBAL_MUSIC_OFFSET_SECONDS = 0.22 # Reasonable default for most songs
 MILLISECONDS_IN_SECONDS = 1000
 
 WHITE_RGB = (0.9, 0.9, 0.9)
@@ -306,7 +306,7 @@ class DisplayedBeat:
         self.position_y_hold_end = position_y_hold_end
 
 class DDRWindow:
-    def __init__(self, song, beatmap, song_music_filepath, precomputed_fps=PRECOMPUTED_FPS, position_x=POSITION_X, position_y=POSITION_Y, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
+    def __init__(self, song, beatmap, song_music_filepath, song_custom_offset_filepath, precomputed_fps=PRECOMPUTED_FPS, position_x=POSITION_X, position_y=POSITION_Y, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
         self._position_x = position_x
         self._position_y = position_y
         self._display_width = display_width
@@ -327,10 +327,13 @@ class DDRWindow:
 
         pygame.mixer.init()
         pygame.mixer.music.load(song_music_filepath)
-        self._music_offset = (beatmap.music_offset() if beatmap.music_offset() else song.music_offset()) + GLOBAL_MUSIC_OFFSET_SECONDS
 
         print('⏳️ Precomputing...')
         self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
+        self._beatmap_music_offset = beatmap.music_offset()
+        self._song_music_offset = song.music_offset()
+        self._custom_offset_filepath = song_custom_offset_filepath
+        self._custom_offset = self._get_custom_offset_from_file()
         print('✅ Precomputing complete!')
 
         self._started = False
@@ -409,14 +412,61 @@ class DDRWindow:
     def _keyboard_func(self, key, x, y):
         if key == b' ' or key == b'\r':
             self._start_song()
+        elif key == b'h' and self._started:
+            self._custom_offset -= 0.01
+            print(f'🔄 Custom offset: {self._custom_offset:.3f}s')
+        elif key == b'j' and self._started:
+            self._custom_offset -= 0.001
+            print(f'🔄 Custom offset: {self._custom_offset:.3f}s')
+        elif key == b'k' and self._started:
+            self._custom_offset += 0.001
+            print(f'🔄 Custom offset: {self._custom_offset:.3f}s')
+        elif key == b'l' and self._started:
+            self._custom_offset += 0.01
+            print(f'🔄 Custom offset: {self._custom_offset:.3f}s')
+        elif key == b'q':
+            self._exit()
+
+    def _get_custom_offset_from_file(self):
+        if os.path.exists(self._custom_offset_filepath):
+            with open(self._custom_offset_filepath) as f:
+                try:
+                    return float(f.read())
+                except ValueError:
+                    return 0
+        else:
+            return 0
+
+    def _maybe_save_custom_offset(self):
+        initial_custom_offset = self._get_custom_offset_from_file()
+        if round(self._custom_offset - initial_custom_offset, 3) != 0:
+            should_save = input(f'💾 Save custom offset of {self._custom_offset:.3f}s; previously {initial_custom_offset:.3f}s (y/n)? ').lower() == 'y'
+            if should_save:
+                with open(self._custom_offset_filepath, 'w') as f:
+                    f.write(str(round(self._custom_offset, 3)))
+
+    def _music_offset_seconds(self):
+        return GLOBAL_MUSIC_OFFSET_SECONDS + (self._beatmap_music_offset if self._beatmap_music_offset else self._song_music_offset) + self._custom_offset
+
+    def _exit(self):
+        if not self._started:
+            return
+        pygame.mixer.music.stop()
+        pygame.quit()
+        glutDestroyWindow(self._window)
+        self._maybe_save_custom_offset()
+        # Forceful exit is unfortunately needed since there is no way to leave the GLUT main loop otherwise
+        # ([sys.exit()] or [raise SystemExit] both result in segmentation faults)
+        # https://www.gamedev.net/forums/topic/376112-terminating-a-glut-loop-inside-a-program/3482380/
+        # https://stackoverflow.com/a/35430500
+        os._exit(0)
 
     def _display_func(self):
         if self._started and not pygame.mixer.music.get_busy(): # Song is over!
-            # TODO: Find out why this keeps segfaulting and maybe find a more graceful way to exit
-            glutDestroyWindow(self._window)
+            self._exit()
         self._display_reset()
         self._target_arrows()
-        self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS - self._music_offset)
+        self._moving_arrows(pygame.mixer.music.get_pos() / MILLISECONDS_IN_SECONDS - self._music_offset_seconds())
         glutSwapBuffers()
 
     def _display_reset(self):
@@ -605,6 +655,7 @@ class DDRWindow:
 ################
 
 SONG_MAIN_DIR_NAME = 'songs'
+CUSTOM_OFFSET_FILENAME = 'custom_offset.dat'
 
 def get_song_folder_list():
     assert(os.path.exists(SONG_MAIN_DIR_NAME))
@@ -617,32 +668,36 @@ def get_song_list(song_folder):
         song_dir_filepath = os.path.join(song_folder_filepath, song_dir_name)
         if not os.path.isdir(song_dir_filepath):
             continue
-        song_ssc_filename = next(filter(lambda file: file.lower().endswith('.ssc'), os.listdir(song_dir_filepath)), None)
-        song_sm_filename = next(filter(lambda file: file.lower().endswith('.sm'), os.listdir(song_dir_filepath)), None)
-        if song_ssc_filename:
-            song_ssc_filepath = os.path.join(song_dir_filepath, song_ssc_filename)
-            with open(song_ssc_filepath) as f:
-                song = parse(f.readlines(), '.ssc')
-        elif song_sm_filename:
-            # .sm is the legacy file format (https://www.reddit.com/r/Stepmania/comments/a1arfu/difference_between_sm_and_ssc_file_types/)
-            song_sm_filepath = os.path.join(song_dir_filepath, song_sm_filename)
-            with open(song_sm_filepath) as f:
-                song = parse(f.readlines(), '.sm')
-        else:
-            song = None
+        song = get_song(song_dir_filepath)
         if not song:
             print(f'⚠️ Skipping "{song_dir_name}" because it is missing the .ssc/.sm file...')
-            continue
-        # TODO: Handle within-song changing BPMS
-        if song.has_varying_beats_per_minute():
             continue
         song_music_filepath = os.path.join(song_dir_filepath, song.music_filename())
         if not os.path.exists(song_music_filepath):
             print(f'⚠️ Skipping "{song_dir_name}" because it is missing the music file...')
             continue
-        song_list.append((song, song_music_filepath))
-    song_list.sort(key=lambda song_and_song_music_filepath_pair: song_and_song_music_filepath_pair[0].displayed_name())
+        song_custom_offset_filepath = os.path.join(song_dir_filepath, CUSTOM_OFFSET_FILENAME)
+        # TODO: Handle within-song changing BPMS
+        if song.has_varying_beats_per_minute():
+            continue
+        song_list.append((song, song_music_filepath, song_custom_offset_filepath))
+    song_list.sort(key=lambda song_and_filepaths_tuple: song_and_filepaths_tuple[0].displayed_name())
     return song_list
+
+def get_song(song_dir_filepath):
+    song_ssc_filename = next(filter(lambda file: file.lower().endswith('.ssc'), os.listdir(song_dir_filepath)), None)
+    song_sm_filename = next(filter(lambda file: file.lower().endswith('.sm'), os.listdir(song_dir_filepath)), None)
+    if song_ssc_filename:
+        song_ssc_filepath = os.path.join(song_dir_filepath, song_ssc_filename)
+        with open(song_ssc_filepath) as f:
+            return parse(f.readlines(), '.ssc')
+    elif song_sm_filename:
+        # .sm is the legacy file format (https://www.reddit.com/r/Stepmania/comments/a1arfu/difference_between_sm_and_ssc_file_types/)
+        song_sm_filepath = os.path.join(song_dir_filepath, song_sm_filename)
+        with open(song_sm_filepath) as f:
+            return parse(f.readlines(), '.sm')
+    else:
+        return None
 
 ################
 # SONG LIST END
@@ -666,6 +721,7 @@ def main():
     song_folder_selected = None
     song_selected = None
     song_selected_music_filepath = None
+    song_custom_offset_filepath = None
     beatmap_selected = None
 
     def select_song_folder():
@@ -678,7 +734,7 @@ def main():
     def select_song():
         nonlocal song_folder_selected
         song_list = get_song_list(song_folder_selected)
-        song_displayed_options = [song.displayed_name() for song, _ in song_list]
+        song_displayed_options = [song.displayed_name() for song, _, _ in song_list]
         _, song_selected_index = pick.pick(options=song_displayed_options + ['<Back>'], title='Choose song...', indicator=PICK_INDICATOR)
         if song_selected_index == len(song_list): # <Back>
             song_folder_selected = None
@@ -686,7 +742,8 @@ def main():
         else:
             nonlocal song_selected
             nonlocal song_selected_music_filepath
-            song_selected, song_selected_music_filepath = song_list[song_selected_index]
+            nonlocal song_custom_offset_filepath
+            song_selected, song_selected_music_filepath, song_custom_offset_filepath = song_list[song_selected_index]
             select_beatmap()
 
     def select_beatmap():
@@ -696,18 +753,20 @@ def main():
         _, beatmap_selected_index = pick.pick(options=beatmap_displayed_options + ['<Back>'], title='Choose difficulty...', indicator=PICK_INDICATOR)
         if beatmap_selected_index == len(beatmap_list): # <Back>
             nonlocal song_selected_music_filepath
+            nonlocal song_custom_offset_filepath
             song_selected = None
             song_selected_music_filepath = None
+            song_custom_offset_filepath = None
             select_song()
         else:
             nonlocal beatmap_selected
             beatmap_selected = beatmap_list[beatmap_selected_index]
 
     select_song_folder()
-    assert(song_folder_selected and song_selected and song_selected_music_filepath and beatmap_selected)
+    assert(song_folder_selected and song_selected and song_selected_music_filepath and song_custom_offset_filepath and beatmap_selected)
 
     print(f'🎵 {song_selected.displayed_name()} | {beatmap_selected.displayed_difficulty()}')
-    ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected, song_music_filepath=song_selected_music_filepath)
+    ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected, song_music_filepath=song_selected_music_filepath, song_custom_offset_filepath=song_custom_offset_filepath)
     ddr_window.start_main_loop()
 
 ################

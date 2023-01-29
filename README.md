@@ -13,7 +13,11 @@ So... [StepMania](https://www.stepmania.com/download/) says _"Sorry, StepMania d
 - Parsing songs that have non 4-4 time signatures
 - Capability to change arrow speed
 - Capability to change song speed
-- Capability to manually adjust the sync for songs (e.g. with arrow keys, much like syncing subtitles for VLC), and to save them to file
+
+## Usage ⚙️
+- `Space` or `Return` to start the song (after song selection)
+- `h`, `j`, `k`, `l` to adjust song sync (-10ms, -1ms, +1ms, +10ms respectively)
+- `q` to quit a song early
 
 ## Demo 🎬
 

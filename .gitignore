@@ -1,3 +1,4 @@
 **/.DS_Store
 songs/*
 !songs/StepMania/*
+**/custom_offset.dat
