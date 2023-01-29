@@ -27,6 +27,7 @@ class Song:
         self._beatmap_list = beatmap_list
         self._cached_beats_per_minute = None
         self._cached_stops = None
+        self._cached_sections = None
 
     def displayed_name(self):
         return f'{self._header_data["TITLE"]} ({self._header_data["ARTIST"]}) · {self._displayed_beats_per_minute()} BPM'
@@ -40,7 +41,7 @@ class Song:
             assert(len(display_bpm_data_split) == 2)
             return f'{int(float(display_bpm_data_split[0]))}~{int(float(display_bpm_data_split[1]))}'
         else:
-            all_beats_per_minutes = [beats_per_minute_assignment[1] for beats_per_minute_assignment in self.beats_per_minute()]
+            all_beats_per_minutes = [beats_per_minute_assignment[1] for beats_per_minute_assignment in self._beats_per_minute()]
             displayed_min_beats_per_minute = int(float(min(all_beats_per_minutes)))
             displayed_max_beats_per_minute = int(float(max(all_beats_per_minutes)))
             if displayed_min_beats_per_minute == displayed_max_beats_per_minute:
@@ -54,7 +55,7 @@ class Song:
     def music_offset(self):
         return float(self._header_data['OFFSET'])
 
-    def beats_per_minute(self):
+    def _beats_per_minute(self):
         if self._cached_beats_per_minute:
             return self._cached_beats_per_minute
         beats_per_minute = self._get_beats_per_minute()
@@ -77,7 +78,7 @@ class Song:
         assert(float(time_signatures_data[2]) == 4)
         return 4
 
-    def stops(self):
+    def _stops(self):
         if self._cached_stops:
             return self._cached_stops
         stops = self._get_stops()
@@ -88,10 +89,61 @@ class Song:
         stops_assignments = parse_comma_separated_assignments(self._header_data['STOPS'])
         return stops_assignments
 
+    def sections(self):
+        if self._cached_sections:
+            return self._cached_sections
+        sections = self._get_sections()
+        self._cached_sections = sections
+        return sections
+
+    def _get_sections(self):
+        section_markers_time_seconds = sorted(list(set([beats_per_minute_assignment[0] for beats_per_minute_assignment in self._beats_per_minute()]).union(set([stop_assignment[0] for stop_assignment in self._stops()])).union(set([stop_assignment[0]+stop_assignment[1] for stop_assignment in self._stops()]))))
+        sections = []
+        beats_per_minute_index = 0
+        current_beats_per_minute = None
+        stops_index = 0
+        current_is_stopped = False
+        accumulated_measure_time = 0
+        for section_marker_time_seconds in section_markers_time_seconds:
+            test_beats_per_minute_assignment = self._beats_per_minute()[beats_per_minute_index] if beats_per_minute_index < len(self._beats_per_minute()) else None
+            test_stop_assignment = self._stops()[stops_index] if stops_index < len(self._stops()) else None
+            if test_beats_per_minute_assignment and section_marker_time_seconds == test_beats_per_minute_assignment[0]:
+                current_beats_per_minute = test_beats_per_minute_assignment[1]
+                beats_per_minute_index += 1
+            if test_stop_assignment and section_marker_time_seconds == test_stop_assignment[0]:
+                current_is_stopped = True
+            if test_stop_assignment and section_marker_time_seconds == test_stop_assignment[0]+test_stop_assignment[1]:
+                current_is_stopped = False
+                stops_index += 1
+            if len(sections) > 0:
+                previous_section = sections[-1]
+                accumulated_measure_time += previous_section.get_measure_time_duration(end_time_seconds=section_marker_time_seconds, beats_per_measure=self.beats_per_measure())
+            section = SongSection(
+                time_seconds=section_marker_time_seconds,
+                beats_per_minute=current_beats_per_minute,
+                is_stopped=current_is_stopped,
+                measure_time=accumulated_measure_time,
+            )
+            sections.append(section)
+        return sections
+
     def ddr_beatmap_list(self):
         ddr_beatmap_list = [beatmap for beatmap in self._beatmap_list if beatmap.is_ddr_beatmap()]
         ddr_beatmap_list.sort(key=lambda beatmap: beatmap.difficulty_int())
         return ddr_beatmap_list
+
+class SongSection:
+    def __init__(self, time_seconds, beats_per_minute, is_stopped, measure_time):
+        self.time_seconds = time_seconds
+        self.beats_per_minute = beats_per_minute
+        self.is_stopped = is_stopped
+        self.measure_time = measure_time
+
+    def get_measure_time_duration(self, end_time_seconds, beats_per_measure):
+        if self.is_stopped:
+            return 0
+        else:
+            return (end_time_seconds - self.time_seconds) * (self.beats_per_minute / SECONDS_IN_MINUTE) / beats_per_measure
 
 class Beatmap:
     def __init__(self, title_line, data):
@@ -223,10 +275,12 @@ def get_hashtag_label(line):
 
 def parse_comma_separated_assignments(line):
     sections = line.split(',')
-    section_assignments = [section.split('=') for section in sections]
-    for section_assignment in section_assignments:
-        assert(len(section_assignment) == 2)
-    return [(float(section_assignment[0]), float(section_assignment[1])) for section_assignment in section_assignments]
+    section_assignments_raw = [section.split('=') for section in sections]
+    for section_assignment_raw in section_assignments_raw:
+        assert(len(section_assignment_raw) == 2)
+    section_assignments = [(float(section_assignment_raw[0]), float(section_assignment_raw[1])) for section_assignment_raw in section_assignments_raw]
+    section_assignments.sort(key=lambda section_assignment: section_assignment[0])
+    return section_assignments
 
 def parse_beatmap(lines, file_format):
     while True:
@@ -372,17 +426,25 @@ class DDRWindow:
     # This can theoretically be optimized by using the fact that [beat_list] is sorted by [measure_time],
     # but doing so feels like over-engineering since this is a precomputing step
     def _precompute_displays(self, song, beatmap, precomputed_fps):
-        beats_per_minute = song.beats_per_minute()
+        sections = song.sections()
+        unstopped_sections = list(filter(lambda section: not section.is_stopped, sections))
         beats_per_measure = song.beats_per_measure()
-        stops = song.stops()
-        beat_list = beatmap.ddr_beat_list()
+
+        def measure_time_to_section(measure_time):
+            for unstopped_section_index, unstopped_section in enumerate(unstopped_sections):
+                if unstopped_section.measure_time > measure_time:
+                    return unstopped_sections[unstopped_section_index-1]
+            return sections[-1]
 
         def measure_time_to_frame(measure_time):
-            return measure_time * beats_per_measure / beats_per_minute[0][1] * SECONDS_IN_MINUTE * precomputed_fps
+            section = measure_time_to_section(measure_time)
+            return (section.time_seconds + (measure_time - section.measure_time) * beats_per_measure / section.beats_per_minute * SECONDS_IN_MINUTE) * precomputed_fps
 
         def measure_time_to_position_y_at_frame(measure_time, frame):
             target_frame = measure_time_to_frame(measure_time)
             return self._arrow_target_position_y + (frame - target_frame) * ARROW_SPEED_PIXELS_PER_FRAME
+
+        beat_list = beatmap.ddr_beat_list()
 
         def get_last_frame_to_precompute():
             last_beat_measure_time = max([beat.measure_time for beat in beat_list])
