@@ -9,11 +9,10 @@ So... [StepMania](https://www.stepmania.com/download/) says _"Sorry, StepMania d
 🤯 **D/DR** is a minimal StepMania clone that is meant to be a MVP display-only on screen, and not meant to be interactive. In other words, it is a glorified `.ssc|.sm` file-to-display converter. Still can be used for practice and/or great fun though 🙃!
 
 🚧 Obviously WIP 🚧. Some things are not working yet, and these may or may not eventually be supported, depending on how much motivation I can muster 😬:
-- Parsing songs that have varying BPMs
-- Parsing songs that have stops
+- Correctly adjusting arrow speed for songs that have varying BPMs and stops
+- Capability to change arrow speed (for comfort)
+- Capability to change song speed (for practice)
 - Parsing songs that have non 4-4 time signatures
-- Capability to change arrow speed
-- Capability to change song speed
 
 ## Usage ⚙️
 - `Space` or `Return` to start the song (after song selection)
