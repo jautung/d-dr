@@ -275,7 +275,7 @@ def get_hashtag_label(line):
 
 def parse_comma_separated_assignments(line):
     sections = line.split(',')
-    section_assignments_raw = [section.split('=') for section in sections]
+    section_assignments_raw = [section.split('=') for section in sections if section != '']
     for section_assignment_raw in section_assignments_raw:
         assert(len(section_assignment_raw) == 2)
     section_assignments = [(float(section_assignment_raw[0]), float(section_assignment_raw[1])) for section_assignment_raw in section_assignments_raw]
