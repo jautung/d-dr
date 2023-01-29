@@ -25,6 +25,8 @@ class Song:
     def __init__(self, header_data, beatmap_list):
         self._header_data = header_data
         self._beatmap_list = beatmap_list
+        self._cached_beats_per_minute = None
+        self._cached_stops = None
 
     def displayed_name(self):
         return f'{self._header_data["TITLE"]} ({self._header_data["ARTIST"]}) · {self._displayed_beats_per_minute()} BPM'
@@ -33,11 +35,18 @@ class Song:
         if 'DISPLAYBPM' in self._header_data:
             display_bpm_data = self._header_data['DISPLAYBPM']
             if ':' not in display_bpm_data:
-                return int(float(display_bpm_data))
+                return f'{int(float(display_bpm_data))}'
             display_bpm_data_split = display_bpm_data.split(':')
             assert(len(display_bpm_data_split) == 2)
             return f'{int(float(display_bpm_data_split[0]))}~{int(float(display_bpm_data_split[1]))}'
-        return int(self.beats_per_minute())
+        else:
+            all_beats_per_minutes = [beats_per_minute_assignment[1] for beats_per_minute_assignment in self.beats_per_minute()]
+            displayed_min_beats_per_minute = int(float(min(all_beats_per_minutes)))
+            displayed_max_beats_per_minute = int(float(max(all_beats_per_minutes)))
+            if displayed_min_beats_per_minute == displayed_max_beats_per_minute:
+                return f'{displayed_min_beats_per_minute}'
+            else:
+                return f'{displayed_min_beats_per_minute}~{displayed_max_beats_per_minute}'
 
     def music_filename(self):
         return self._header_data['MUSIC']
@@ -46,18 +55,17 @@ class Song:
         return float(self._header_data['OFFSET'])
 
     def beats_per_minute(self):
-        # TODO: Handle within-song changing BPMS
-        bpms_data = self._header_data['BPMS'].split('=')
-        assert(float(bpms_data[0]) == 0)
-        return float(bpms_data[1])
+        if self._cached_beats_per_minute:
+            return self._cached_beats_per_minute
+        beats_per_minute = self._get_beats_per_minute()
+        self._cached_beats_per_minute = beats_per_minute
+        return beats_per_minute
 
-    def has_varying_beats_per_minute(self):
-        # TODO: Handle within-song changing BPMS
-        return ',' in self._header_data['BPMS']
-
-    def has_stops(self):
-        # TODO: Handle stops
-        return len(self._header_data['STOPS']) > 0
+    def _get_beats_per_minute(self):
+        beats_per_minute_assignments = parse_comma_separated_assignments(self._header_data['BPMS'])
+        assert(len(beats_per_minute_assignments) > 0)
+        assert(float(beats_per_minute_assignments[0][0]) == 0)
+        return beats_per_minute_assignments
 
     def beats_per_measure(self):
         if 'TIMESIGNATURES' not in self._header_data:
@@ -68,6 +76,17 @@ class Song:
         assert(float(time_signatures_data[1]) == 4)
         assert(float(time_signatures_data[2]) == 4)
         return 4
+
+    def stops(self):
+        if self._cached_stops:
+            return self._cached_stops
+        stops = self._get_stops()
+        self._cached_stops = stops
+        return stops
+
+    def _get_stops(self):
+        stops_assignments = parse_comma_separated_assignments(self._header_data['STOPS'])
+        return stops_assignments
 
     def ddr_beatmap_list(self):
         ddr_beatmap_list = [beatmap for beatmap in self._beatmap_list if beatmap.is_ddr_beatmap()]
@@ -202,6 +221,13 @@ def get_hashtag_label(line):
     assert(semicolon_index != -1)
     return line[:semicolon_index]
 
+def parse_comma_separated_assignments(line):
+    sections = line.split(',')
+    section_assignments = [section.split('=') for section in sections]
+    for section_assignment in section_assignments:
+        assert(len(section_assignment) == 2)
+    return [(float(section_assignment[0]), float(section_assignment[1])) for section_assignment in section_assignments]
+
 def parse_beatmap(lines, file_format):
     while True:
         if len(lines) == 0:
@@ -293,6 +319,7 @@ SONG_SPEED = 1 # TODO: Respect this and make this configurable
 
 GLOBAL_MUSIC_OFFSET_SECONDS = 0.22 # Reasonable default for most songs
 MILLISECONDS_IN_SECONDS = 1000
+SECONDS_IN_MINUTE = 60
 
 WHITE_RGB = (0.9, 0.9, 0.9)
 RED_RGB = (1.0, 0.25, 0.25)
@@ -347,10 +374,11 @@ class DDRWindow:
     def _precompute_displays(self, song, beatmap, precomputed_fps):
         beats_per_minute = song.beats_per_minute()
         beats_per_measure = song.beats_per_measure()
+        stops = song.stops()
         beat_list = beatmap.ddr_beat_list()
 
         def measure_time_to_frame(measure_time):
-            return measure_time * beats_per_measure / beats_per_minute * 60 * precomputed_fps
+            return measure_time * beats_per_measure / beats_per_minute[0][1] * SECONDS_IN_MINUTE * precomputed_fps
 
         def measure_time_to_position_y_at_frame(measure_time, frame):
             target_frame = measure_time_to_frame(measure_time)
@@ -681,12 +709,6 @@ def get_song_list(song_folder):
             print(f'⚠️ Skipping "{song_dir_name}" because it is missing the music file...')
             continue
         song_custom_offset_filepath = os.path.join(song_dir_filepath, CUSTOM_OFFSET_FILENAME)
-        # TODO: Handle within-song changing BPMS
-        if song.has_varying_beats_per_minute():
-            continue
-        # TODO: Handle stops
-        if song.has_stops():
-            continue
         song_list.append((song, song_music_filepath, song_custom_offset_filepath))
     song_list.sort(key=lambda song_and_filepaths_tuple: song_and_filepaths_tuple[0].displayed_name())
     return song_list
