@@ -10,6 +10,7 @@ So... [StepMania](https://www.stepmania.com/download/) says _"Sorry, StepMania d
 
 🚧 Obviously WIP 🚧. Some things are not working yet, and these may or may not eventually be supported, depending on how much motivation I can muster 😬:
 - Parsing songs that have varying BPMs
+- Parsing songs that have stops
 - Parsing songs that have non 4-4 time signatures
 - Capability to change arrow speed
 - Capability to change song speed

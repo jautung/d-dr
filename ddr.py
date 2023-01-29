@@ -55,6 +55,10 @@ class Song:
         # TODO: Handle within-song changing BPMS
         return ',' in self._header_data['BPMS']
 
+    def has_stops(self):
+        # TODO: Handle stops
+        return len(self._header_data['STOPS']) > 0
+
     def beats_per_measure(self):
         if 'TIMESIGNATURES' not in self._header_data:
             return 4 # This is the default if not specified
@@ -679,6 +683,9 @@ def get_song_list(song_folder):
         song_custom_offset_filepath = os.path.join(song_dir_filepath, CUSTOM_OFFSET_FILENAME)
         # TODO: Handle within-song changing BPMS
         if song.has_varying_beats_per_minute():
+            continue
+        # TODO: Handle stops
+        if song.has_stops():
             continue
         song_list.append((song, song_music_filepath, song_custom_offset_filepath))
     song_list.sort(key=lambda song_and_filepaths_tuple: song_and_filepaths_tuple[0].displayed_name())
