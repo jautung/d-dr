@@ -870,7 +870,7 @@ def main():
         beats_per_minute_min_max = song_selected.beats_per_minute_min_max()
         beats_per_measure = song_selected.beats_per_measure()
         def displayed_speed(measure_height, beats_per_minute):
-            return round(measure_height * (beats_per_minute / beats_per_measure) / SECONDS_IN_MINUTE, 1)
+            return round(measure_height * (beats_per_minute / beats_per_measure) / SECONDS_IN_MINUTE)
         def displayed_measure_height(measure_height):
             if len(beats_per_minute_min_max) == 1:
                 return f'{measure_height} ({displayed_speed(measure_height, beats_per_minute_min_max[0])} pixels/s)'
