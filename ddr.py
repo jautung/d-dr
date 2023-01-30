@@ -41,13 +41,13 @@ class Song:
             assert(len(display_bpm_data_split) == 2)
             return f'{int(float(display_bpm_data_split[0]))}~{int(float(display_bpm_data_split[1]))}'
         else:
-            all_beats_per_minutes = [beats_per_minute_assignment[1] for beats_per_minute_assignment in self._beats_per_minute()]
-            displayed_min_beats_per_minute = int(float(min(all_beats_per_minutes)))
-            displayed_max_beats_per_minute = int(float(max(all_beats_per_minutes)))
-            if displayed_min_beats_per_minute == displayed_max_beats_per_minute:
-                return f'{displayed_min_beats_per_minute}'
+            beats_per_minute_min_max = self.beats_per_minute_min_max()
+            if len(beats_per_minute_min_max) == 1:
+                return f'{int(beats_per_minute_min_max[0])}'
+            elif len(beats_per_minute_min_max) == 2:
+                return f'{int(beats_per_minute_min_max[0])}~{int(beats_per_minute_min_max[1])}'
             else:
-                return f'{displayed_min_beats_per_minute}~{displayed_max_beats_per_minute}'
+                assert(False)
 
     def music_filename(self):
         return self._header_data['MUSIC']
@@ -67,6 +67,15 @@ class Song:
         assert(len(beats_per_minute_assignments) > 0)
         assert(float(beats_per_minute_assignments[0][0]) == 0)
         return beats_per_minute_assignments
+
+    def beats_per_minute_min_max(self):
+        all_beats_per_minutes = [beats_per_minute_assignment[1] for beats_per_minute_assignment in self._beats_per_minute()]
+        displayed_min_beats_per_minute = float(min(all_beats_per_minutes))
+        displayed_max_beats_per_minute = float(max(all_beats_per_minutes))
+        if displayed_min_beats_per_minute == displayed_max_beats_per_minute:
+            return (displayed_min_beats_per_minute,)
+        else:
+            return (displayed_min_beats_per_minute, displayed_max_beats_per_minute)
 
     def beats_per_measure(self):
         if 'TIMESIGNATURES' not in self._header_data:
@@ -89,14 +98,14 @@ class Song:
         stops_assignments = parse_comma_separated_assignments(self._header_data['STOPS'])
         return stops_assignments
 
-    def sections(self):
+    def sections(self, measure_height):
         if self._cached_sections:
             return self._cached_sections
-        sections = self._get_sections()
+        sections = self._get_sections(measure_height)
         self._cached_sections = sections
         return sections
 
-    def _get_sections(self):
+    def _get_sections(self, measure_height):
         section_markers_time_seconds = sorted(list(set([beats_per_minute_assignment[0] for beats_per_minute_assignment in self._beats_per_minute()]).union(set([stop_assignment[0] for stop_assignment in self._stops()])).union(set([stop_assignment[0]+stop_assignment[1] for stop_assignment in self._stops()]))))
         sections = []
         beats_per_minute_index = 0
@@ -117,7 +126,7 @@ class Song:
                 stops_index += 1
             if len(sections) > 0:
                 previous_section = sections[-1]
-                accumulated_pixel_distance += previous_section.pixel_distance_until_time(end_time_seconds=section_marker_time_seconds, beats_per_measure=self.beats_per_measure())
+                accumulated_pixel_distance += previous_section.pixel_distance_until_time(end_time_seconds=section_marker_time_seconds, beats_per_measure=self.beats_per_measure(), measure_height=measure_height)
             section = SongSection(
                 time_seconds=section_marker_time_seconds,
                 beats_per_minute=current_beats_per_minute,
@@ -139,11 +148,11 @@ class SongSection:
         self.is_stopped = is_stopped
         self.accumulated_pixel_distance_start = accumulated_pixel_distance_start
 
-    def pixel_distance_until_time(self, end_time_seconds, beats_per_measure):
+    def pixel_distance_until_time(self, end_time_seconds, beats_per_measure, measure_height):
         if self.is_stopped:
             return 0
         else:
-            return (end_time_seconds - self.time_seconds) * (self.beats_per_minute / SECONDS_IN_MINUTE) / beats_per_measure * MEASURE_HEIGHT
+            return (end_time_seconds - self.time_seconds) * (self.beats_per_minute / SECONDS_IN_MINUTE) / beats_per_measure * measure_height
 
 class Beatmap:
     def __init__(self, title_line, data):
@@ -363,9 +372,8 @@ MINE_MARGIN = ARROW_SIZE/10
 MINE_EXCLAMATION_WIDTH = ARROW_STRAIGHT_WIDTH
 MINE_EXCLAMATION_HEIGHT = ARROW_SIZE/3
 
-MEASURE_HEIGHT = 1000 # TODO: Make this configurable (this is a proxy for arrow speed)
-
-SONG_SPEED = 1 # TODO: Respect this and make this configurable
+MEASURE_HEIGHT_OPTIONS = [200, 500, 800, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2500, 3000, 3500, 4000, 8000]
+MEASURE_HEIGHT_DEFAULT_INDEX = 3
 
 GLOBAL_MUSIC_OFFSET_SECONDS = 0.22 # Reasonable default for most songs
 MILLISECONDS_IN_SECONDS = 1000
@@ -390,7 +398,7 @@ class DisplayedBeat:
         self.position_y_hold_end = position_y_hold_end
 
 class DDRWindow:
-    def __init__(self, song, beatmap, song_music_filepath, song_custom_offset_filepath, precomputed_fps=PRECOMPUTED_FPS, position_x=POSITION_X, position_y=POSITION_Y, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
+    def __init__(self, song, beatmap, measure_height_selected, song_music_filepath, song_custom_offset_filepath, precomputed_fps=PRECOMPUTED_FPS, position_x=POSITION_X, position_y=POSITION_Y, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
         self._position_x = position_x
         self._position_y = position_y
         self._display_width = display_width
@@ -413,7 +421,7 @@ class DDRWindow:
         pygame.mixer.music.load(song_music_filepath)
 
         print('⏳️ Precomputing...')
-        self._precomputed_displays = self._precompute_displays(song, beatmap, precomputed_fps)
+        self._precomputed_displays = self._precompute_displays(song, beatmap, measure_height_selected, precomputed_fps)
         self._beatmap_music_offset = beatmap.music_offset()
         self._song_music_offset = song.music_offset()
         self._custom_offset_filepath = song_custom_offset_filepath
@@ -424,8 +432,8 @@ class DDRWindow:
 
     # This can theoretically be optimized by using the fact that [beat_list] is sorted by [measure_time],
     # but doing so feels like over-engineering since this is a precomputing step
-    def _precompute_displays(self, song, beatmap, precomputed_fps):
-        sections = song.sections()
+    def _precompute_displays(self, song, beatmap, measure_height_selected, precomputed_fps):
+        sections = song.sections(measure_height_selected)
         beats_per_measure = song.beats_per_measure()
 
         def time_seconds_to_section(time_seconds):
@@ -436,10 +444,10 @@ class DDRWindow:
 
         def pixel_distance_until_time(time_seconds):
             section = time_seconds_to_section(time_seconds)
-            return section.accumulated_pixel_distance_start + section.pixel_distance_until_time(end_time_seconds=time_seconds, beats_per_measure=beats_per_measure)
+            return section.accumulated_pixel_distance_start + section.pixel_distance_until_time(end_time_seconds=time_seconds, beats_per_measure=beats_per_measure, measure_height=measure_height_selected)
 
         def measure_time_to_position_y_at_frame(measure_time, frame):
-            initial_position_y = self._arrow_target_position_y - measure_time * MEASURE_HEIGHT
+            initial_position_y = self._arrow_target_position_y - measure_time * measure_height_selected
             return initial_position_y + pixel_distance_until_time(time_seconds=frame/precomputed_fps)
 
         beat_list = beatmap.ddr_beat_list()
@@ -816,6 +824,7 @@ def main():
     song_selected_music_filepath = None
     song_custom_offset_filepath = None
     beatmap_selected = None
+    measure_height_selected = None
 
     def select_song_folder():
         song_folder_list = get_song_folder_list()
@@ -854,12 +863,31 @@ def main():
         else:
             nonlocal beatmap_selected
             beatmap_selected = beatmap_list[beatmap_selected_index]
+            select_measure_height()
+
+    def select_measure_height():
+        nonlocal song_selected
+        beats_per_minute_min_max = song_selected.beats_per_minute_min_max()
+        beats_per_measure = song_selected.beats_per_measure()
+        def displayed_speed(measure_height, beats_per_minute):
+            return round(measure_height * (beats_per_minute / beats_per_measure) / SECONDS_IN_MINUTE, 1)
+        def displayed_measure_height(measure_height):
+            if len(beats_per_minute_min_max) == 1:
+                return f'{measure_height} ({displayed_speed(measure_height, beats_per_minute_min_max[0])} pixels/s)'
+            elif len(beats_per_minute_min_max) == 2:
+                return f'{measure_height} ({displayed_speed(measure_height, beats_per_minute_min_max[0])}~{displayed_speed(measure_height, beats_per_minute_min_max[1])} pixels/s)'
+            else:
+                assert(False)
+        measure_height_displayed_options = [displayed_measure_height(measure_height) for measure_height in MEASURE_HEIGHT_OPTIONS]
+        _, measure_height_selected_index = pick.pick(options=measure_height_displayed_options, title='Choose speed...', indicator=PICK_INDICATOR, default_index=MEASURE_HEIGHT_DEFAULT_INDEX)
+        nonlocal measure_height_selected
+        measure_height_selected = MEASURE_HEIGHT_OPTIONS[measure_height_selected_index]
 
     select_song_folder()
-    assert(song_folder_selected and song_selected and song_selected_music_filepath and song_custom_offset_filepath and beatmap_selected)
+    assert(song_folder_selected and song_selected and song_selected_music_filepath and song_custom_offset_filepath and beatmap_selected and measure_height_selected)
 
     print(f'🎵 {song_selected.displayed_name()} | {beatmap_selected.displayed_difficulty()}')
-    ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected, song_music_filepath=song_selected_music_filepath, song_custom_offset_filepath=song_custom_offset_filepath)
+    ddr_window = DDRWindow(song=song_selected, beatmap=beatmap_selected, measure_height_selected=measure_height_selected, song_music_filepath=song_selected_music_filepath, song_custom_offset_filepath=song_custom_offset_filepath)
     ddr_window.start_main_loop()
 
 ################
