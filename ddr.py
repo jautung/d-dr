@@ -550,7 +550,7 @@ class DDRWindow:
                     f.write(str(round(self._custom_offset, 3)))
 
     def _music_offset_seconds(self):
-        return GLOBAL_MUSIC_OFFSET_SECONDS + (self._beatmap_music_offset if self._beatmap_music_offset else self._song_music_offset) + self._custom_offset
+        return GLOBAL_MUSIC_OFFSET_SECONDS - (self._beatmap_music_offset if self._beatmap_music_offset else self._song_music_offset) + self._custom_offset
 
     def _exit(self):
         if not self._started:
