@@ -9,6 +9,7 @@ import enum
 import math
 import pick
 import pygame
+import time
 
 ################
 # SONG START
@@ -421,12 +422,14 @@ class DDRWindow:
         pygame.mixer.music.load(song_music_filepath)
 
         print('⏳️ Precomputing...')
+        start_precomputing_time = time.time()
         self._precomputed_displays = self._precompute_displays(song, beatmap, measure_height_selected, precomputed_fps)
         self._beatmap_music_offset = beatmap.music_offset()
         self._song_music_offset = song.music_offset()
         self._custom_offset_filepath = song_custom_offset_filepath
         self._custom_offset = self._get_custom_offset_from_file()
-        print('✅ Precomputing complete!')
+        end_precomputing_time = time.time()
+        print(f'✅ Precomputing complete! ({round(end_precomputing_time-start_precomputing_time, 1)}s)')
 
         self._started = False
 
