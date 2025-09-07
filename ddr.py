@@ -20,6 +20,7 @@ DDR_BEAT_VARIANT_NONE = '0'
 DDR_BEAT_VARIANT_DEFAULT = '1'
 DDR_BEAT_VARIANT_HOLD_START = '2'
 DDR_BEAT_VARIANT_HOLD_END = '3'
+DDR_BEAT_VARIANT_ROLL_START = '4'
 DDR_BEAT_VARIANT_MINE = 'M'
 
 class Song:
@@ -472,7 +473,7 @@ class DDRWindow:
             if beat.variant == DDR_BEAT_VARIANT_HOLD_END:
                 return None # Display will be handled by the start of the hold note
             position_y = measure_time_to_position_y_at_frame(beat.measure_time, frame)
-            if beat.variant == DDR_BEAT_VARIANT_HOLD_START:
+            if beat.variant == DDR_BEAT_VARIANT_HOLD_START or beat.variant == DDR_BEAT_VARIANT_ROLL_START:
                 position_y_hold_end = measure_time_to_position_y_at_frame(get_beat_hold_end_for_hold_start(beat, beat_index).measure_time, frame)
             else:
                 position_y_hold_end = None
@@ -487,7 +488,7 @@ class DDRWindow:
             )
 
         def get_beat_hold_end_for_hold_start(beat, beat_index):
-            assert(beat.variant == DDR_BEAT_VARIANT_HOLD_START)
+            assert(beat.variant == DDR_BEAT_VARIANT_HOLD_START or beat.variant == DDR_BEAT_VARIANT_ROLL_START)
             for next_beat in beat_list[beat_index+1:]:
                 if next_beat.variant == DDR_BEAT_VARIANT_HOLD_END and next_beat.direction == beat.direction:
                     return next_beat
@@ -612,7 +613,7 @@ class DDRWindow:
         for displayed_beat in displayed_beats:
             if displayed_beat.variant == DDR_BEAT_VARIANT_DEFAULT:
                 self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
-            elif displayed_beat.variant == DDR_BEAT_VARIANT_HOLD_START:
+            elif displayed_beat.variant == DDR_BEAT_VARIANT_HOLD_START or displayed_beat.variant == DDR_BEAT_VARIANT_ROLL_START:
                 self._hold_background(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y, position_y_hold_end=displayed_beat.position_y_hold_end)
                 self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y)
                 self._arrow(rgb=displayed_beat.rgb, direction=displayed_beat.direction, position_y=displayed_beat.position_y_hold_end, is_outline_only=True)
