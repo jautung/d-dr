@@ -255,6 +255,8 @@ def parse_hashtag_headered(lines):
         line = lines.pop(0).strip('\n')
         if line == '' or line.startswith('//'):
             break
+        if line == ';':
+            continue
         header_label = get_hashtag_label(line)
         assert(line[len(header_label)+1] == ':' or line[len(header_label)+1] == ';')
         if line[len(header_label)+1] == ';':
